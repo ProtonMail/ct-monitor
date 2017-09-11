@@ -63,15 +63,15 @@ def notify(ctr_hash=None,
     """
 
     if zero_results is True:
-        # Message informing that there is no certifacates identified.
-        TEMPLATE = "No new certifacates were identified for %s." % (domain)
+        # Message informing that there is no certificates identified.
+        TEMPLATE = "No new certificates were identified for %s." % (domain)
     elif scan_finished is True:
         # Message informing that a scan is finished for a domain.
         TEMPLATE = "Scan finished for %s." % (domain)
     else:
         current_date = calendar.timegm(time.gmtime())
-        # Message informing a user with new identified certifacate.
-        TEMPLATE = """The following certifacate has been identified:
+        # Message informing a user with new identified certificate.
+        TEMPLATE = """The following certificate has been identified:
 * CTR_Hash: %s
 * Domain: %s
 * Date Discovered: %s
@@ -133,7 +133,7 @@ class GoogleCTR_API(object):
         Input:
         domain: the domain to scan.
         Output:
-        a list of CTR hahes associated with the domain.
+        a list of CTR hashes associated with the domain.
         """
 
         output = []
@@ -211,7 +211,7 @@ class DBHandler(object):
         Initialize the DB.
         Input: None
         Output:
-        return: 0: if no errors occured.
+        return: 0: if no errors occurred.
         """
 
         self.c.execute("""CREATE TABLE IF NOT EXISTS "Data" ("CTR_Hash" TEXT, "Domain" TEXT, "Date_Added" NUMERIC, "dnsNames" TEXT, "validFrom" TEXT, "validTo" TEXT, "serialNumber" TEXT, "subject" TEXT, "signatureAlgorithm" TEXT, "certificateType" TEXT, "issuer" TEXT);""")
@@ -244,7 +244,7 @@ class DBHandler(object):
         domain: Domain name.
         cert_data: the output of get_certificates_of_domain function
         Output:-
-        return: 0: if no errors occured.
+        return: 0: if no errors occurred.
         """
 
         current_date = calendar.timegm(time.gmtime())
@@ -260,7 +260,7 @@ class DBHandler(object):
         scan_type: The scan type.
         new_identified_Certs_count: The sum of new identified certificates.
         Output:-
-        return: 0: if no errors occured.
+        return: 0: if no errors occurred.
         """
 
         current_date = calendar.timegm(time.gmtime())
@@ -279,7 +279,7 @@ def run(domain, initial_scan=False, db=None):
     initialize_scan: if set to True, notification will not occur.
                      default: False.
     Output:-
-    return: 0: if no errors occured.
+    return: 0: if no errors occurred.
     """
 
     new_identified_Certs_counter = 0
@@ -319,7 +319,7 @@ def main():
     parser.add_argument("--db",
                         dest="db",
                         help="The SQLITE database to save results.\
-                              If not exsited, it will be automatically\
+                              If not existed, it will be automatically\
                               created.",
                         action='store',
                         required=True)
