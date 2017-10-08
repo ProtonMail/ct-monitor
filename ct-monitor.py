@@ -5,7 +5,7 @@
 # * Description:
 #   A monitoring tool for certificate transparency.
 # * Version:
-#   v0.1
+#   v0.2
 # * Author:
 #   Mazin Ahmed <Mazin AT ProtonMail DOT com>
 # *******************************************************************
@@ -21,24 +21,6 @@ try:
     from urllib.parse import quote_plus
 except ImportError:
     from urllib import quote_plus
-
-
-def jsonp2json_convert(jsonp):
-    """
-    Coverts JSONP to JSON.
-    Source:
-    https://github.com/tohyongcheng/jsonp2json
-    """
-
-    try:
-        l_index = jsonp.index('(') + 1
-        r_index = jsonp.rindex(')')
-    except ValueError:
-        print("Input is not in a jsonp format.")
-        return(0)
-
-    res = jsonp[l_index:r_index]
-    return(res)
 
 
 def notification_handler(notification_message):
@@ -81,13 +63,11 @@ def notify(ctr_hash=None,
 * serialNumber: %s
 * subject: %s
 * signatureAlgorithm: %s
-* certificateType: %s
 * issuer: %s
     """ % (ctr_hash, domain, current_date, cert_data["dnsNames"],
            cert_data["validFrom"], cert_data["validTo"],
            cert_data["serialNumber"], cert_data["subject"],
-           cert_data["signatureAlgorithm"], cert_data["certificateType"],
-           cert_data["issuer"])
+           cert_data["signatureAlgorithm"], cert_data["issuer"])
 
     notification_handler(TEMPLATE)
     return(0)
@@ -102,7 +82,7 @@ class GoogleCTR_API(object):
         """
 
         self.timeout = 4
-        self.user_agent = "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:51.0) Gecko/20100101 Firefox/51.0"
+        self.user_agent = "ct-monitor (https://github.com/ProtonMail/ct-monitor)"
         self.headers = {"User-Agent": self.user_agent, 'Accept': '*/*'}
 
     def certificates_of_domain_query_parser(self, response):
@@ -117,13 +97,18 @@ class GoogleCTR_API(object):
         """
 
         output = {"hashes": [], "nextPageToken": ""}
+        if response[0][0] == str("er"):
+            output["nextPageToken"] = None
+            return(output)
 
-        for i in range(len(response["results"])):
-            output["hashes"].append(str(response["results"][i]["hash"]))
         try:
-            output["nextPageToken"] = str(response["nextPageToken"])
+            output["nextPageToken"] = str(response[0][-1][1])
         except KeyError:
             output["nextPageToken"] = None  # Reached last page.
+
+        for i in range(len(response[0][1])):
+            ctr_hash = response[0][1][i][5]
+            output["hashes"].append(ctr_hash)
 
         return(output)
 
@@ -140,12 +125,21 @@ class GoogleCTR_API(object):
         token = ""
 
         while token is not None:
-            url = "https://www.google.com/transparencyreport/jsonp/ct/search?domain={}&incl_exp=true&incl_sub=true&token={}&c=callback".format(quote_plus(domain), quote_plus(token))
+
+            if token == "":
+                url = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch?include_expired=true&include_subdomains=true&domain={0}".format(quote_plus(domain))
+            else:
+                url = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch/page?include_expired=true&include_subdomains=true&domain={0}&p={1}".format(quote_plus(domain), quote_plus(token))
             resp = requests.get(url, headers=self.headers, timeout=self.timeout)
+
             if resp.status_code == 503:
-                return([])
-            resp = jsonp2json_convert(resp.text)
-            resp = json.loads(resp)
+                return(output)
+
+            resp = json.loads(resp.text.split("\n\n")[1])
+
+            if (resp[0][1] is not None) and (len(resp[0][1]) == 0):
+                return(output)
+
             parsed_response = self.certificates_of_domain_query_parser(resp)
 
             token = parsed_response["nextPageToken"]
@@ -165,12 +159,11 @@ class GoogleCTR_API(object):
         serialNumber: serialNumber entry.
         subject: subject entry.
         signatureAlgorithm: signatureAlgorithm entry.
-        certificateType: certificateType entry.
         issuer: issuer entry.
         """
 
         output = {}
-        url = "https://www.google.com/transparencyreport/jsonp/ct/cert?hash={}&c=callback".format(quote_plus(ctr_hash))
+        url = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certbyhash?hash={0}".format(quote_plus(ctr_hash))
         resp = requests.get(url, headers=self.headers, timeout=self.timeout)
         if resp.status_code == 503:
             output = {"dnsNames": "NA",
@@ -182,20 +175,18 @@ class GoogleCTR_API(object):
                       "certificateType": "NA",
                       "issuer": "NA"}
             return(output)
-        resp = jsonp2json_convert(resp.text)
-        resp = json.loads(resp)
+        resp = json.loads(resp.text.split("\n\n")[1])
 
-        if resp["result"]["dnsNames"]:
-            output.update({"dnsNames": ", ".join(resp["result"]["dnsNames"])})
-        else:
+        output.update({"serialNumber": resp[0][1][0]})
+        output.update({"subject": resp[0][1][1]})
+        output.update({"issuer": resp[0][1][2]})
+        output.update({"validFrom": resp[0][1][3]})
+        output.update({"validTo": resp[0][1][4]})
+        output.update({"signatureAlgorithm": resp[0][1][6]})
+        if resp[0][1][7] == "":
             output.update({"dnsNames": "NA"})
-        output.update({"validFrom": resp["result"]["validFrom"]})
-        output.update({"validTo": resp["result"]["validTo"]})
-        output.update({"serialNumber": resp["result"]["serialNumber"]})
-        output.update({"subject": resp["result"]["subject"]})
-        output.update({"signatureAlgorithm": resp["result"]["signatureAlgorithm"]})
-        output.update({"certificateType": resp["result"]["certificateType"]})
-        output.update({"issuer": resp["result"]["issuer"]})
+        else:
+            output.update({"dnsNames": ", ".join(resp[0][1][7])})
 
         return(output)
 
@@ -214,7 +205,7 @@ class DBHandler(object):
         return: 0: if no errors occurred.
         """
 
-        self.c.execute("""CREATE TABLE IF NOT EXISTS "Data" ("CTR_Hash" TEXT, "Domain" TEXT, "Date_Added" NUMERIC, "dnsNames" TEXT, "validFrom" TEXT, "validTo" TEXT, "serialNumber" TEXT, "subject" TEXT, "signatureAlgorithm" TEXT, "certificateType" TEXT, "issuer" TEXT);""")
+        self.c.execute("""CREATE TABLE IF NOT EXISTS "Data" ("CTR_Hash" TEXT, "Domain" TEXT, "Date_Added" NUMERIC, "dnsNames" TEXT, "validFrom" TEXT, "validTo" TEXT, "serialNumber" TEXT, "subject" TEXT, "signatureAlgorithm" TEXT, "issuer" TEXT);""")
         self.c.execute("""CREATE TABLE IF NOT EXISTS "Logs" ("Date" NUMERIC, "Scan_Type" TEXT, "New_Identified_Certs_Count" INTEGER);""")
         self.conn.commit()
         return(0)
@@ -248,7 +239,7 @@ class DBHandler(object):
         """
 
         current_date = calendar.timegm(time.gmtime())
-        self.c.execute("""INSERT INTO "Data" VALUES(? ,? , ?, ?, ?, ?, ?, ?, ?, ?, ?) """, (ctr_hash, domain, current_date, cert_data["dnsNames"], cert_data["validFrom"], cert_data["validTo"], cert_data["serialNumber"], cert_data["subject"], cert_data["signatureAlgorithm"], cert_data["certificateType"], cert_data["issuer"],))
+        self.c.execute("""INSERT INTO "Data" VALUES(? ,? , ?, ?, ?, ?, ?, ?, ?, ?) """, (ctr_hash, domain, current_date, cert_data["dnsNames"], cert_data["validFrom"], cert_data["validTo"], cert_data["serialNumber"], cert_data["subject"], cert_data["signatureAlgorithm"], cert_data["issuer"],))
         self.conn.commit()
 
         return(0)
