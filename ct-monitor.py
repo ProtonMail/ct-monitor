@@ -64,13 +64,26 @@ def notify(ctr_hash=None,
 * subject: %s
 * signatureAlgorithm: %s
 * issuer: %s
-    """ % (ctr_hash, domain, current_date, cert_data["dnsNames"],
-           cert_data["validFrom"], cert_data["validTo"],
-           cert_data["serialNumber"], cert_data["subject"],
-           cert_data["signatureAlgorithm"], cert_data["issuer"])
+    """ % (ctr_hash,
+           domain,
+           format_date(current_date),
+           cert_data["dnsNames"],
+           format_date(cert_data["validFrom"], certificate_date=True),
+           format_date(cert_data["validTo"], certificate_date=True),
+           cert_data["serialNumber"],
+           cert_data["subject"],
+           cert_data["signatureAlgorithm"],
+           cert_data["issuer"])
 
     notification_handler(TEMPLATE)
     return(0)
+
+
+def format_date(epoch, certificate_date=False):
+    if certificate_date:
+        return time.strftime('%d-%B-%Y %H:%M:%S UTC', time.gmtime((int(epoch / 1000))))
+    else:
+        return time.strftime('%d-%B-%Y %H:%M:%S UTC', time.gmtime(epoch))
 
 
 class GoogleCTR_API(object):
@@ -127,9 +140,9 @@ class GoogleCTR_API(object):
         while token is not None:
 
             if token == "":
-                url = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch?include_expired=true&include_subdomains=true&domain={0}".format(quote_plus(domain))
+                url = "https://transparencyreport.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch?include_expired=true&include_subdomains=true&domain={0}".format(quote_plus(domain))
             else:
-                url = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch/page?include_expired=true&include_subdomains=true&domain={0}&p={1}".format(quote_plus(domain), quote_plus(token))
+                url = "https://transparencyreport.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch/page?include_expired=true&include_subdomains=true&domain={0}&p={1}".format(quote_plus(domain), quote_plus(token))
             resp = requests.get(url, headers=self.headers, timeout=self.timeout)
 
             if resp.status_code == 503:
@@ -163,7 +176,7 @@ class GoogleCTR_API(object):
         """
 
         output = {}
-        url = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certbyhash?hash={0}".format(quote_plus(ctr_hash))
+        url = "https://transparencyreport.google.com/transparencyreport/api/v3/httpsreport/ct/certbyhash?hash={0}".format(quote_plus(ctr_hash))
         resp = requests.get(url, headers=self.headers, timeout=self.timeout)
         if resp.status_code == 503:
             output = {"dnsNames": "NA",
